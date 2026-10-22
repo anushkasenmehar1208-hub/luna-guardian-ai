@@ -25,6 +25,14 @@ def test_single_generated_token_configuration(monkeypatch):
     assert main._token_map() == {"generated-secret": "render-student"}
 
 
+def test_render_hostname_is_allowed_for_mcp(monkeypatch):
+    monkeypatch.setenv("RENDER_EXTERNAL_HOSTNAME", "luna-guardian-ai.onrender.com")
+    security = main._mcp_transport_security()
+    assert security.enable_dns_rebinding_protection is True
+    assert "luna-guardian-ai.onrender.com" in security.allowed_hosts
+    assert "https://luna-guardian-ai.onrender.com" in security.allowed_origins
+
+
 def test_natural_language_agent_executes_and_persists_tools(client):
     response = client.post(
         "/api/agent",

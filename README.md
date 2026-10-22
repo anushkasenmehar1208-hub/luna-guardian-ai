@@ -58,6 +58,7 @@ Open <http://127.0.0.1:8000>. The development fallback bearer token is `demo-tok
 | `LUNA_AUTH_USER_ID` | User identity associated with `LUNA_AUTH_TOKEN` |
 | `LUNA_DB_PATH` | SQLite database path; use persistent storage in production |
 | `DATABASE_URL` | PostgreSQL connection URL; takes precedence over `LUNA_DB_PATH` |
+| `LUNA_PUBLIC_HOST` | Optional public hostname override for MCP DNS-rebinding protection; Render injects its hostname automatically |
 | `LUNA_RATE_LIMIT_PER_MINUTE` | Per-token request limit, default `120` |
 | `LUNA_AGENT_PROVIDER` | `local`, `bedrock`, or `openai-compatible` |
 | `AWS_REGION` | Bedrock region |

@@ -15,6 +15,7 @@ import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
 from mcp.server.fastmcp import FastMCP
+from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
 
 from . import agent, core
@@ -97,7 +98,28 @@ def run_tool(name: str, arguments: dict[str, Any]) -> Any:
     return agent.execute_tool(user(), name, arguments)
 
 
-mcp = FastMCP("Luna Guardian", stateless_http=True, json_response=True, streamable_http_path="/")
+def _mcp_transport_security() -> TransportSecuritySettings:
+    public_host = os.getenv("RENDER_EXTERNAL_HOSTNAME") or os.getenv("LUNA_PUBLIC_HOST")
+    allowed_hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*", "testserver"]
+    allowed_origins = ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*"]
+    if public_host:
+        allowed_hosts.append(public_host)
+        allowed_origins.append(f"https://{public_host}")
+    return TransportSecuritySettings(
+        enable_dns_rebinding_protection=True,
+        allowed_hosts=allowed_hosts,
+        allowed_origins=allowed_origins,
+    )
+
+
+mcp = FastMCP(
+    "Luna Guardian",
+    host="0.0.0.0",
+    stateless_http=True,
+    json_response=True,
+    streamable_http_path="/",
+    transport_security=_mcp_transport_security(),
+)
 
 
 @mcp.tool()
