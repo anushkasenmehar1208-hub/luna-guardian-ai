@@ -122,7 +122,7 @@ Verified locally on October 22, 2026:
 - Real MCP initialization negotiated `2025-11-25`
 - All nine required tools were discovered
 - Authenticated MCP `create_task` and `list_tasks` calls succeeded and persisted data
-- The exact Java-exam request completed locally through `/api/agent` → authenticated MCP → persistence with one shared request ID; the equivalent live LLM run remains required before submission
+- The exact Java-exam request completed both locally and in the public deployment through `/api/agent` → Gemini → authenticated MCP → PostgreSQL with one shared request ID
 
 GitHub Actions workflows are present in both repositories, but the initial hosted job was rejected before executing any step because the GitHub account was locked for a billing issue. See the friction log; this is not reported as a test failure or a passing CI run.
 
@@ -145,7 +145,7 @@ Render's free web service sleeps after 15 minutes without inbound traffic. Its f
 - MCP endpoint: <https://luna-guardian-ai.onrender.com/mcp/>
 - Source: <https://github.com/anushkasenmehar1208-hub/luna-guardian-ai>
 
-Verified on October 22, 2026: the public health check and authenticated REST API returned successfully; an official MCP client negotiated protocol `2025-11-25`, discovered all nine tools, and executed `create_task` and `list_tasks`; data created before a web-service redeploy remained in PostgreSQL afterward.
+Verified on October 22, 2026: the public health check and authenticated REST API returned successfully; an official MCP client negotiated protocol `2025-11-25`, discovered all nine tools, and executed `create_task` and `list_tasks`; data created before a web-service redeploy remained in PostgreSQL afterward. The live `gemini-3.1-flash-lite` agent also interpreted the exact Java-exam prompt, selected `create_task` and `create_study_plan`, invoked both through authenticated MCP, and persisted one 120-minute task plus three study sessions. A page reload restored the task, sessions, and matching activity records from PostgreSQL.
 
 ## Project materials
 

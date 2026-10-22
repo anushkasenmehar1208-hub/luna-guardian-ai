@@ -1,6 +1,6 @@
 # Product feedback draft
 
-Use this as a source for Devpost's required Product Feedback answer. Remove any integration that is not part of the final submitted build, replace the bracketed LLM row after live verification, and keep claims tied to observed behavior.
+Use this as a source for Devpost's required Product Feedback answer. Remove any integration that is not part of the final submitted build and keep claims tied to observed behavior.
 
 ## Model Context Protocol Python SDK
 
@@ -42,13 +42,13 @@ Use this as a source for Devpost's required Product Feedback answer. Remove any 
 - **Onboarding:** Minimal code, but true device/browser testing is essential.
 - **Build again:** Yes as an enhancement with a visible text fallback, not as a universal voice layer.
 
-## Actual LLM provider
+## Google Gemini API (`gemini-3.1-flash-lite`)
 
-- **Used for:** [Replace after live verification: model name/API] interprets natural language and independently selects MCP tools.
-- **Worked well:** [Record observed tool-selection quality, latency, and final-response quality.]
-- **Needs work:** [Record any schema compatibility, quota, latency, or reliability issues.]
-- **Onboarding:** [Record the real credential/model setup experience.]
-- **Build again:** [Yes/No with evidence-based reason.]
+- **Used for:** Interpreting natural-language academic requests and independently selecting the authenticated MCP tools to execute.
+- **Worked well:** The OpenAI-compatible endpoint supported function calling without adapter-specific code. In the live exact-prompt test, the model selected `create_task` and `create_study_plan`, produced valid schemas, and returned a concise three-session plan after both calls succeeded.
+- **Needs work:** Free-tier quotas and availability require monitoring, and the provider label exposed by the generic adapter is `openai-compatible` rather than the friendlier Gemini model name. Model-produced dates and times still need clear timezone display in the UI.
+- **Onboarding:** Creating a dedicated free-tier key in Google AI Studio and storing it as a private Render environment variable was quick. The key value never belongs in source control, logs, screenshots, or submission text.
+- **Build again:** Yes. The free tier and standards-compatible function-calling interface were effective for this demo, with quota-aware error handling retained.
 
 ## Amazon services and Alexa+
 

@@ -21,9 +21,9 @@ Official sources: [requirements and submission fields](https://amazonappdev2026.
 |---|---|---|
 | New project or significant update during the submission window | Pass for new-project path, subject to entrant attestation | Repository history dates the implementation to the event window; describe this as a new build. |
 | Working Alexa+ track project | Pass, self-hosted MCP/web-simulation path | FastAPI web app and MCP server are implemented in runtime code. |
-| MCP spec 2025-11-25 or later | Pass | Official MCP client negotiation previously returned protocol `2025-11-25`. Recheck after final deploy. |
-| Streamable HTTP transport | Pass | Canonical endpoint is `/mcp/` over HTTPS. Recheck after final deploy. |
-| Track technology imported and actually called at runtime | Pending final live proof | Production is configured so model-selected tools call `/mcp/` through the official MCP client. Capture the exact Java workflow after the final deploy. |
+| MCP spec 2025-11-25 or later | Pass, live | Final-deploy logs recorded protocol negotiation at `2025-11-25`. |
+| Streamable HTTP transport | Pass, live | Canonical endpoint is `/mcp/` over HTTPS; the exact live agent run produced successful MCP POSTs and two `CallToolRequest` records. |
+| Track technology imported and actually called at runtime | Pass, live | `gemini-3.1-flash-lite` selected `create_task` and `create_study_plan`; the official MCP client executed both, preserving request `673663b9-1d2f-4ae5-9c14-97cedfae3e0d`. |
 | Functioning project shown on its intended platform | Pending video | Record the live web simulation and public MCP proof. No physical Alexa device is required by the FAQ. |
 | Authorized third-party SDK/API/data use | Review required | Comply with the MCP SDK, LLM provider, Render, PostgreSQL, and browser API terms. |
 
@@ -46,7 +46,7 @@ Official sources: [requirements and submission fields](https://amazonappdev2026.
 | Public YouTube or Vimeo URL | Blocker | Upload the English video publicly and paste the URL into Devpost. |
 | Video shows the project functioning | Blocker until recorded | Use the exact Java request, refresh persistence proof, dashboard timeline, voice/text fallback, and MCP protocol/tool discovery. |
 | No unlicensed trademarks, music, or footage | Pending video review | Use original screen capture and narration; omit music unless licensed. |
-| Product feedback for every tool/API/SDK | Draft incomplete until provider is final | Cover MCP Python SDK, FastAPI, PostgreSQL/psycopg, Render, the actual LLM API, Web Speech API, and any other submitted integration. |
+| Product feedback for every tool/API/SDK | Draft ready for final form | `docs/product-feedback.md` covers MCP Python SDK, FastAPI/Pydantic, PostgreSQL/psycopg, Render, Web Speech API, and the verified Gemini API/model. |
 | Primary track identified | Ready | Alexa+ |
 | Existing-project changes described, if applicable | Not applicable if submitted as new | If the entrant says it predates Aug 31, add a precise before/after explanation and show it in the video. |
 | Optional feature requests | Optional | Add only if useful. |
@@ -65,11 +65,9 @@ The entrant must personally confirm originality, sole ownership or authorized te
 
 ## Final no-submit checklist
 
-1. Complete a live LLM-to-MCP-to-PostgreSQL run and retain its request ID.
-2. Test microphone behavior in a supported browser and demonstrate the visible text fallback.
-3. Record and upload the sub-three-minute public English video.
-4. Add the live bearer credential only to private Devpost testing instructions.
-5. Include the verified additional open-source repository URL and required what/how/why explanation if entering that mini challenge.
-6. Fill every required Product Feedback field using only integrations actually verified.
-7. Select Alexa+ and, if desired, Open Source; do not select AWS Builder without a real AWS integration.
-8. Review entrant eligibility/ownership attestations and submit before the deadline. This repository audit does not submit anything.
+1. In a supported browser with a real microphone, record one visible speech-to-transcript attempt; text fallback and spoken-reply controls are already verified.
+2. Record and upload the sub-three-minute public English video.
+3. Add the live bearer credential only to private Devpost testing instructions.
+4. Include the verified additional open-source repository URL and required what/how/why explanation if entering that mini challenge.
+5. Select Alexa+ and, if desired, Open Source; do not select AWS Builder without a real AWS integration.
+6. Review entrant eligibility/ownership attestations and submit before the deadline. This repository audit does not submit anything.
