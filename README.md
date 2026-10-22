@@ -54,6 +54,8 @@ Open <http://127.0.0.1:8000>. The development fallback bearer token is `demo-tok
 | `LUNA_AUTH_TOKENS` | JSON object mapping opaque bearer tokens to stable user IDs |
 | `LUNA_AUTH_TOKEN` | Alternative single opaque token; generated automatically by the Render Blueprint |
 | `LUNA_AUTH_USER_ID` | User identity associated with `LUNA_AUTH_TOKEN` |
+| `LUNA_PUBLIC_DEMO_TOKEN` | Optional intentionally public, rate-limited token shown on the login screen for judges |
+| `LUNA_PUBLIC_DEMO_USER_ID` | Shared demo identity associated with the public demo token |
 | `LUNA_DB_PATH` | SQLite database path; use persistent storage in production |
 | `DATABASE_URL` | PostgreSQL connection URL; takes precedence over `LUNA_DB_PATH` |
 | `LUNA_PUBLIC_HOST` | Optional public hostname override for MCP DNS-rebinding protection; Render injects its hostname automatically |

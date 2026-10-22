@@ -15,6 +15,10 @@ services:
         generateValue: true
       - key: LUNA_AUTH_USER_ID
         value: luna-submission-demo
+      - key: LUNA_PUBLIC_DEMO_TOKEN
+        value: luna-guardian-judge-demo
+      - key: LUNA_PUBLIC_DEMO_USER_ID
+        value: luna-submission-demo
       - key: LUNA_AGENT_PROVIDER
         value: openai-compatible
       - key: LUNA_OPENAI_BASE_URL

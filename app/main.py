@@ -29,6 +29,7 @@ current_request_id: ContextVar[str] = ContextVar("current_request_id", default="
 
 
 def _token_map() -> dict[str, str]:
+    tokens: dict[str, str]
     raw = os.getenv("LUNA_AUTH_TOKENS")
     if raw:
         try:
@@ -41,13 +42,19 @@ def _token_map() -> dict[str, str]:
             or not all(isinstance(k, str) and isinstance(v, str) for k, v in parsed.items())
         ):
             raise RuntimeError("LUNA_AUTH_TOKENS must be a non-empty string-to-string JSON object")
-        return parsed
-    generated_token = os.getenv("LUNA_AUTH_TOKEN")
-    if generated_token:
-        return {generated_token: os.getenv("LUNA_AUTH_USER_ID", "demo-student")}
-    if os.getenv("LUNA_ENV", "development") == "production":
-        raise RuntimeError("Set LUNA_AUTH_TOKENS or LUNA_AUTH_TOKEN before running in production")
-    return {"demo-token": "demo-student"}
+        tokens = parsed
+    else:
+        generated_token = os.getenv("LUNA_AUTH_TOKEN")
+        if generated_token:
+            tokens = {generated_token: os.getenv("LUNA_AUTH_USER_ID", "demo-student")}
+        elif os.getenv("LUNA_ENV", "development") == "production":
+            raise RuntimeError("Set LUNA_AUTH_TOKENS or LUNA_AUTH_TOKEN before running in production")
+        else:
+            tokens = {"demo-token": "demo-student"}
+    public_demo_token = os.getenv("LUNA_PUBLIC_DEMO_TOKEN", "").strip()
+    if public_demo_token:
+        tokens[public_demo_token] = os.getenv("LUNA_PUBLIC_DEMO_USER_ID", "demo-student")
+    return tokens
 
 
 TOKENS = _token_map()
@@ -308,12 +315,16 @@ def index() -> FileResponse:
 @app.get("/health")
 @app.get("/api/status")
 def health() -> dict:
-    return {
+    status = {
         "status": "ok",
         "service": "luna-guardian",
         "agent_provider": os.getenv("LUNA_AGENT_PROVIDER", "local"),
         "agent_tool_transport": os.getenv("LUNA_AGENT_TOOL_TRANSPORT", "direct"),
     }
+    public_demo_token = os.getenv("LUNA_PUBLIC_DEMO_TOKEN", "").strip()
+    if public_demo_token:
+        status["demo_bearer_token"] = public_demo_token
+    return status
 
 
 @app.get("/api/tasks")

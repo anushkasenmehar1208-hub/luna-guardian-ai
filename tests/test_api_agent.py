@@ -27,9 +27,26 @@ def test_authentication_is_required(client):
 
 def test_single_generated_token_configuration(monkeypatch):
     monkeypatch.delenv("LUNA_AUTH_TOKENS", raising=False)
+    monkeypatch.delenv("LUNA_PUBLIC_DEMO_TOKEN", raising=False)
     monkeypatch.setenv("LUNA_AUTH_TOKEN", "generated-secret")
     monkeypatch.setenv("LUNA_AUTH_USER_ID", "render-student")
     assert main._token_map() == {"generated-secret": "render-student"}
+
+
+def test_public_demo_token_is_additive_and_status_discloses_only_it(client, monkeypatch):
+    monkeypatch.delenv("LUNA_AUTH_TOKENS", raising=False)
+    monkeypatch.setenv("LUNA_AUTH_TOKEN", "private-generated-secret")
+    monkeypatch.setenv("LUNA_AUTH_USER_ID", "private-student")
+    monkeypatch.setenv("LUNA_PUBLIC_DEMO_TOKEN", "public-demo-token")
+    monkeypatch.setenv("LUNA_PUBLIC_DEMO_USER_ID", "shared-demo-student")
+    assert main._token_map() == {
+        "private-generated-secret": "private-student",
+        "public-demo-token": "shared-demo-student",
+    }
+    response = client.get("/api/status")
+    assert response.status_code == 200
+    assert response.json()["demo_bearer_token"] == "public-demo-token"
+    assert "private-generated-secret" not in response.text
 
 
 def test_render_hostname_is_allowed_for_mcp(monkeypatch):
