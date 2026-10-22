@@ -10,7 +10,7 @@ This repository is an **Alexa+-style simulated experience** for the Build, Ship,
 
 - An authenticated MCP server using the official Python SDK, Streamable HTTP, and protocol `2025-11-25`
 - Nine persistent tools: `create_task`, `list_tasks`, `update_task`, `complete_task`, `create_study_plan`, `get_study_plan`, `replan_missed_session`, `get_student_context`, and `update_student_context`
-- User-isolated SQLite data for context, commitments, tasks, plans, study sessions, completion history, and agent activity
+- User-isolated relational data for context, commitments, tasks, plans, study sessions, completion history, and agent activity (SQLite locally; PostgreSQL on Render)
 - A tool-calling agent with Amazon Bedrock, OpenAI-compatible, and clearly labelled offline rule-based providers
 - A responsive dashboard with live priorities, deadlines, schedule, progress, tool activity, browser speech recognition, text fallback, and optional speech output
 - Bearer authentication, bounded request sizes, validation, rate limiting, safe timezone conversion, and database error propagation
@@ -26,7 +26,7 @@ FastAPI /api/agent ──► provider (Bedrock / OpenAI-compatible / local rules
       └──────── real tool calls ◄────┘
                      │
                      ▼
-              domain service ──► SQLite
+              domain service ──► SQLite / PostgreSQL
                      ▲
                      │
 MCP client ── Streamable HTTP /mcp/ ── bearer auth
@@ -57,6 +57,7 @@ Open <http://127.0.0.1:8000>. The development fallback bearer token is `demo-tok
 | `LUNA_AUTH_TOKEN` | Alternative single opaque token; generated automatically by the Render Blueprint |
 | `LUNA_AUTH_USER_ID` | User identity associated with `LUNA_AUTH_TOKEN` |
 | `LUNA_DB_PATH` | SQLite database path; use persistent storage in production |
+| `DATABASE_URL` | PostgreSQL connection URL; takes precedence over `LUNA_DB_PATH` |
 | `LUNA_RATE_LIMIT_PER_MINUTE` | Per-token request limit, default `120` |
 | `LUNA_AGENT_PROVIDER` | `local`, `bedrock`, or `openai-compatible` |
 | `AWS_REGION` | Bedrock region |
@@ -114,7 +115,7 @@ python -m compileall -q app tests
 
 Verified locally on October 22, 2026:
 
-- 7 automated tests passed
+- 8 automated tests passed
 - Ruff passed
 - Python compilation passed
 - Real MCP initialization negotiated `2025-11-25`
@@ -127,12 +128,14 @@ Browser speech recognition depends on browser support and microphone permission.
 
 ## Deployment
 
-The included `Dockerfile` and `render.yaml` run the application on Render with a persistent disk. Before deployment:
+The included `Dockerfile` and `render.yaml` run the application on Render's free web-service and PostgreSQL plans. Before deployment:
 
 1. Let the Blueprint generate `LUNA_AUTH_TOKEN`, or provide `LUNA_AUTH_TOKENS` through Render's secret controls.
-2. Mount persistent storage at `/var/data`; the blueprint sets `LUNA_DB_PATH=/var/data/luna.db`.
+2. The Blueprint injects the free Postgres connection string as `DATABASE_URL`; no persistent disk is required.
 3. Configure an LLM provider and its credentials.
-4. Verify `/health`, load the dashboard, and repeat the official MCP client check against HTTPS.
+4. Verify `/health`, load the dashboard, repeat the official MCP client check against HTTPS, and confirm data survives a redeploy.
+
+Render's free web service sleeps after 15 minutes without inbound traffic. Its free PostgreSQL database is limited to 1 GB, has no backups, and expires 30 days after creation; this is suitable for a hackathon demo, not durable production storage.
 
 No public deployment or public repository is claimed until its URL is verified.
 

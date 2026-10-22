@@ -9,9 +9,104 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+import psycopg
+from psycopg.rows import dict_row
+
 DB_PATH = os.getenv("LUNA_DB_PATH", str(Path(__file__).resolve().parent.parent / "luna.db"))
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
 SESSION_MINUTES = 50
 BREAK_MINUTES = 10
+
+SCHEMA = """
+CREATE TABLE IF NOT EXISTS student_context (
+    user_id TEXT PRIMARY KEY,
+    timezone TEXT NOT NULL DEFAULT 'UTC',
+    preferences_json TEXT NOT NULL DEFAULT '{{}}',
+    commitments_json TEXT NOT NULL DEFAULT '[]',
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS tasks (
+    id {id_type},
+    user_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL DEFAULT '',
+    course TEXT NOT NULL DEFAULT '',
+    deadline TEXT NOT NULL,
+    estimated_minutes INTEGER NOT NULL CHECK(estimated_minutes BETWEEN 1 AND 10080),
+    priority INTEGER NOT NULL DEFAULT 3 CHECK(priority BETWEEN 1 AND 5),
+    status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','in_progress','completed')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_tasks_user_deadline ON tasks(user_id,status,deadline);
+CREATE TABLE IF NOT EXISTS study_plans (
+    id {id_type},
+    user_id TEXT NOT NULL,
+    starts_at TEXT NOT NULL,
+    available_minutes INTEGER NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','superseded','completed')),
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS study_sessions (
+    id {id_type},
+    plan_id INTEGER NOT NULL REFERENCES study_plans(id),
+    user_id TEXT NOT NULL,
+    task_id INTEGER NOT NULL REFERENCES tasks(id),
+    starts_at TEXT NOT NULL,
+    minutes INTEGER NOT NULL CHECK(minutes > 0),
+    status TEXT NOT NULL DEFAULT 'planned' CHECK(status IN ('planned','completed','missed','cancelled','superseded')),
+    completed_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user_start ON study_sessions(user_id,status,starts_at);
+CREATE TABLE IF NOT EXISTS activity_log (
+    id {id_type},
+    user_id TEXT NOT NULL,
+    request_id TEXT,
+    tool_name TEXT NOT NULL,
+    arguments_json TEXT NOT NULL,
+    status TEXT NOT NULL,
+    result_json TEXT,
+    database_changes INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+"""
+
+
+class Connection:
+    """Small DB-API adapter that keeps the domain SQL portable across SQLite and Postgres."""
+
+    def __init__(self) -> None:
+        self.is_postgres = bool(DATABASE_URL)
+        if self.is_postgres:
+            self.raw = psycopg.connect(DATABASE_URL, row_factory=dict_row)
+        else:
+            self.raw = sqlite3.connect(DB_PATH, timeout=10)
+            self.raw.row_factory = sqlite3.Row
+
+    def execute(self, query: str, params: Any = ()) -> Any:
+        if self.is_postgres:
+            query = query.replace("?", "%s")
+        return self.raw.execute(query, params)
+
+    def commit(self) -> None:
+        self.raw.commit()
+
+    def __enter__(self) -> Connection:
+        return self
+
+    def __exit__(self, exc_type: Any, exc: Any, traceback: Any) -> None:
+        if exc_type is None:
+            self.raw.commit()
+        else:
+            self.raw.rollback()
+        self.raw.close()
+
+
+def _insert_id(con: Connection, query: str, params: Any) -> int:
+    if con.is_postgres:
+        return int(con.execute(f"{query} RETURNING id", params).fetchone()["id"])
+    return int(con.execute(query, params).lastrowid)
 
 
 def now_utc() -> datetime:
@@ -32,72 +127,21 @@ def _json(value: Any) -> str:
     return json.dumps(value, separators=(",", ":"), ensure_ascii=False)
 
 
-def connect() -> sqlite3.Connection:
-    con = sqlite3.connect(DB_PATH, timeout=10)
-    con.row_factory = sqlite3.Row
-    con.execute("PRAGMA foreign_keys=ON")
-    con.execute("PRAGMA journal_mode=WAL")
-    con.executescript(
-        """
-        CREATE TABLE IF NOT EXISTS student_context (
-            user_id TEXT PRIMARY KEY,
-            timezone TEXT NOT NULL DEFAULT 'UTC',
-            preferences_json TEXT NOT NULL DEFAULT '{}',
-            commitments_json TEXT NOT NULL DEFAULT '[]',
-            updated_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS tasks (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            title TEXT NOT NULL,
-            description TEXT NOT NULL DEFAULT '',
-            course TEXT NOT NULL DEFAULT '',
-            deadline TEXT NOT NULL,
-            estimated_minutes INTEGER NOT NULL CHECK(estimated_minutes BETWEEN 1 AND 10080),
-            priority INTEGER NOT NULL DEFAULT 3 CHECK(priority BETWEEN 1 AND 5),
-            status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','in_progress','completed')),
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL,
-            completed_at TEXT
-        );
-        CREATE INDEX IF NOT EXISTS idx_tasks_user_deadline ON tasks(user_id,status,deadline);
-        CREATE TABLE IF NOT EXISTS study_plans (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            starts_at TEXT NOT NULL,
-            available_minutes INTEGER NOT NULL,
-            status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active','superseded','completed')),
-            created_at TEXT NOT NULL
-        );
-        CREATE TABLE IF NOT EXISTS study_sessions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            plan_id INTEGER NOT NULL REFERENCES study_plans(id),
-            user_id TEXT NOT NULL,
-            task_id INTEGER NOT NULL REFERENCES tasks(id),
-            starts_at TEXT NOT NULL,
-            minutes INTEGER NOT NULL CHECK(minutes > 0),
-            status TEXT NOT NULL DEFAULT 'planned' CHECK(status IN ('planned','completed','missed','cancelled','superseded')),
-            completed_at TEXT
-        );
-        CREATE INDEX IF NOT EXISTS idx_sessions_user_start ON study_sessions(user_id,status,starts_at);
-        CREATE TABLE IF NOT EXISTS activity_log (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id TEXT NOT NULL,
-            request_id TEXT,
-            tool_name TEXT NOT NULL,
-            arguments_json TEXT NOT NULL,
-            status TEXT NOT NULL,
-            result_json TEXT,
-            database_changes INTEGER NOT NULL DEFAULT 0,
-            created_at TEXT NOT NULL
-        );
-        """
-    )
+def connect() -> Connection:
+    con = Connection()
+    if con.is_postgres:
+        for statement in SCHEMA.format(id_type="BIGSERIAL PRIMARY KEY").split(";"):
+            if statement.strip():
+                con.execute(statement)
+    else:
+        con.execute("PRAGMA foreign_keys=ON")
+        con.execute("PRAGMA journal_mode=WAL")
+        con.raw.executescript(SCHEMA.format(id_type="INTEGER PRIMARY KEY AUTOINCREMENT"))
     con.commit()
     return con
 
 
-def _task(row: sqlite3.Row) -> dict[str, Any]:
+def _task(row: Any) -> dict[str, Any]:
     result = dict(row)
     result["completed"] = result["status"] == "completed"
     result["minutes"] = result["estimated_minutes"]
@@ -123,7 +167,8 @@ def create_task(
     due = utc(deadline)
     stamp = now_utc().isoformat()
     with connect() as con:
-        cur = con.execute(
+        task_id = _insert_id(
+            con,
             """INSERT INTO tasks(user_id,title,description,course,deadline,estimated_minutes,priority,created_at,updated_at)
                VALUES (?,?,?,?,?,?,?,?,?)""",
             (
@@ -138,7 +183,7 @@ def create_task(
                 stamp,
             ),
         )
-        return _task(con.execute("SELECT * FROM tasks WHERE id=?", (cur.lastrowid,)).fetchone())
+        return _task(con.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone())
 
 
 def list_tasks(user_id: str, status: str | None = None) -> list[dict[str, Any]]:
@@ -207,21 +252,23 @@ def create_study_plan(user_id: str, start_at: str, available_minutes: int) -> di
     with connect() as con:
         con.execute("UPDATE study_plans SET status='superseded' WHERE user_id=? AND status='active'", (user_id,))
         con.execute("UPDATE study_sessions SET status='superseded' WHERE user_id=? AND status='planned'", (user_id,))
-        plan_id = con.execute(
+        plan_id = _insert_id(
+            con,
             "INSERT INTO study_plans(user_id,starts_at,available_minutes,created_at) VALUES (?,?,?,?)",
             (user_id, start.isoformat(), available_minutes, stamp),
-        ).lastrowid
+        )
         for task in tasks:
             needed = task["estimated_minutes"]
             while needed > 0 and remaining > 0 and cursor < utc(task["deadline"]):
                 chunk = min(SESSION_MINUTES, needed, remaining)
-                cur = con.execute(
+                session_id = _insert_id(
+                    con,
                     "INSERT INTO study_sessions(plan_id,user_id,task_id,starts_at,minutes) VALUES (?,?,?,?,?)",
                     (plan_id, user_id, task["id"], cursor.isoformat(), chunk),
                 )
                 sessions.append(
                     {
-                        "id": cur.lastrowid,
+                        "id": session_id,
                         "plan_id": plan_id,
                         "task_id": task["id"],
                         "title": task["title"],
@@ -349,7 +396,8 @@ def log_activity(
     request_id: str | None = None,
 ) -> dict[str, Any]:
     with connect() as con:
-        cur = con.execute(
+        activity_id = _insert_id(
+            con,
             """INSERT INTO activity_log(user_id,request_id,tool_name,arguments_json,status,result_json,database_changes,created_at)
                VALUES (?,?,?,?,?,?,?,?)""",
             (
@@ -363,7 +411,7 @@ def log_activity(
                 now_utc().isoformat(),
             ),
         )
-        return dict(con.execute("SELECT * FROM activity_log WHERE id=?", (cur.lastrowid,)).fetchone())
+        return dict(con.execute("SELECT * FROM activity_log WHERE id=?", (activity_id,)).fetchone())
 
 
 def list_activity(user_id: str, limit: int = 50) -> list[dict[str, Any]]:
