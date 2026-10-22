@@ -4,6 +4,8 @@ Luna Guardian is a voice-first academic planning agent for university students. 
 
 This repository is an **Alexa+-style simulated experience** for the Build, Ship, Shape: Amazon Developer Hackathon 2026. It is not an official Alexa+ integration.
 
+![Luna Guardian responsive dashboard](docs/images/dashboard.png)
+
 ## What is working
 
 - An authenticated MCP server using the official Python SDK, Streamable HTTP, and protocol `2025-11-25`
