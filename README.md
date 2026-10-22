@@ -145,7 +145,7 @@ Render's free web service sleeps after 15 minutes without inbound traffic. Its f
 - MCP endpoint: <https://luna-guardian-ai.onrender.com/mcp/>
 - Source: <https://github.com/anushkasenmehar1208-hub/luna-guardian-ai>
 
-Verified on October 22, 2026: the public health check and authenticated REST API returned successfully; an official MCP client negotiated protocol `2025-11-25`, discovered all nine tools, and executed `create_task` and `list_tasks`; data created before a web-service redeploy remained in PostgreSQL afterward. The live `gemini-3.1-flash-lite` agent also interpreted the exact Java-exam prompt, selected `create_task` and `create_study_plan`, invoked both through authenticated MCP, and persisted one 120-minute task plus three study sessions. A page reload restored the task, sessions, and matching activity records from PostgreSQL.
+Verified on October 22, 2026: the public health check and authenticated REST API returned successfully; an official MCP client negotiated protocol `2025-11-25`, discovered all nine tools, and executed `create_task` and `list_tasks`; data created before a web-service redeploy remained in PostgreSQL afterward. The exact Java-exam creation workflow was verified with `gemini-3.1-flash-lite`: the model selected `create_task` and `create_study_plan`, invoked both through authenticated MCP, and persisted one 120-minute task plus three study sessions. The current free-tier model is `gemini-3.5-flash-lite`; a separate live request verified that it selected and executed `list_tasks` through MCP and returned the persisted task. A page reload restored the task, sessions, and matching activity records from PostgreSQL.
 
 ## Project materials
 

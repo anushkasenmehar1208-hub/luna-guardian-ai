@@ -42,11 +42,11 @@ Use this as a source for Devpost's required Product Feedback answer. Remove any 
 - **Onboarding:** Minimal code, but true device/browser testing is essential.
 - **Build again:** Yes as an enhancement with a visible text fallback, not as a universal voice layer.
 
-## Google Gemini API (`gemini-3.1-flash-lite`)
+## Google Gemini API (`gemini-3.5-flash-lite` current; `gemini-3.1-flash-lite` original workflow)
 
 - **Used for:** Interpreting natural-language academic requests and independently selecting the authenticated MCP tools to execute.
-- **Worked well:** The OpenAI-compatible endpoint supported function calling without adapter-specific code. In the live exact-prompt test, the model selected `create_task` and `create_study_plan`, produced valid schemas, and returned a concise three-session plan after both calls succeeded.
-- **Needs work:** Free-tier quotas and availability require monitoring, and the provider label exposed by the generic adapter is `openai-compatible` rather than the friendlier Gemini model name. Model-produced dates and times still need clear timezone display in the UI.
+- **Worked well:** The OpenAI-compatible endpoint supported function calling without adapter-specific code. In the live exact-prompt test, `gemini-3.1-flash-lite` selected `create_task` and `create_study_plan`, produced valid schemas, and returned a concise three-session plan after both calls succeeded. The current `gemini-3.5-flash-lite` deployment also selected and executed `list_tasks` through MCP and returned the persisted task.
+- **Needs work:** A transient series of `503 Service Unavailable` responses required bounded retries and safe user-facing errors before moving the deployment to the current stable model. Free-tier quotas and availability still require monitoring, and the provider label exposed by the generic adapter is `openai-compatible` rather than the friendlier Gemini model name. Model-produced dates and times still need clear timezone display in the UI.
 - **Onboarding:** Creating a dedicated free-tier key in Google AI Studio and storing it as a private Render environment variable was quick. The key value never belongs in source control, logs, screenshots, or submission text.
 - **Build again:** Yes. The free tier and standards-compatible function-calling interface were effective for this demo, with quota-aware error handling retained.
 

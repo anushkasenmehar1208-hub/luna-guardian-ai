@@ -23,7 +23,7 @@ Official sources: [requirements and submission fields](https://amazonappdev2026.
 | Working Alexa+ track project | Pass, self-hosted MCP/web-simulation path | FastAPI web app and MCP server are implemented in runtime code. |
 | MCP spec 2025-11-25 or later | Pass, live | Final-deploy logs recorded protocol negotiation at `2025-11-25`. |
 | Streamable HTTP transport | Pass, live | Canonical endpoint is `/mcp/` over HTTPS; the exact live agent run produced successful MCP POSTs and two `CallToolRequest` records. |
-| Track technology imported and actually called at runtime | Pass, live | `gemini-3.1-flash-lite` selected `create_task` and `create_study_plan`; the official MCP client executed both, preserving request `673663b9-1d2f-4ae5-9c14-97cedfae3e0d`. |
+| Track technology imported and actually called at runtime | Pass, live | The original exact workflow used `gemini-3.1-flash-lite` to select `create_task` and `create_study_plan`, preserving request `673663b9-1d2f-4ae5-9c14-97cedfae3e0d`. After moving to the current free-tier `gemini-3.5-flash-lite`, a fresh live request selected and executed `list_tasks` through MCP under request `6c455857-17da-4883-ba10-21bbe91c4c13`. |
 | Functioning project shown on its intended platform | Pending video | Record the live web simulation and public MCP proof. No physical Alexa device is required by the FAQ. |
 | Authorized third-party SDK/API/data use | Review required | Comply with the MCP SDK, LLM provider, Render, PostgreSQL, and browser API terms. |
 

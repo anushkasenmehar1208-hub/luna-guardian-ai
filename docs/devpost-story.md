@@ -10,7 +10,7 @@ Luna Guardian accepts a spoken or typed request, extracts academic commitments, 
 
 ## How we built it
 
-The application combines FastAPI, the official Python MCP SDK, PostgreSQL, Pydantic, and a responsive browser dashboard. The live `gemini-3.1-flash-lite` agent uses Google's OpenAI-compatible API and sends authenticated Streamable HTTP requests to the same MCP endpoint available to external clients; the MCP tools and REST dashboard share one persistence layer. Provider adapters also support Amazon Bedrock Converse tool use, while an explicitly labelled deterministic provider keeps local development usable without credentials. Bedrock is not claimed as a verified live integration.
+The application combines FastAPI, the official Python MCP SDK, PostgreSQL, Pydantic, and a responsive browser dashboard. The live `gemini-3.5-flash-lite` agent uses Google's OpenAI-compatible API and sends authenticated Streamable HTTP requests to the same MCP endpoint available to external clients; the MCP tools and REST dashboard share one persistence layer. The original exact create-and-plan workflow was verified with `gemini-3.1-flash-lite`, and the current model was separately verified selecting and executing `list_tasks` through MCP. Provider adapters also support Amazon Bedrock Converse tool use, while an explicitly labelled deterministic provider keeps local development usable without credentials. Bedrock is not claimed as a verified live integration.
 
 The scheduler prioritizes urgent, high-priority tasks, divides work into sessions of up to 50 minutes, inserts recovery breaks, prevents scheduling after a deadline, and persists every plan. Authentication maps opaque bearer tokens to user identities so database queries remain isolated.
 
