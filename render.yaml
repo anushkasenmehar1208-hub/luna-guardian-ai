@@ -2,7 +2,7 @@ services:
   - type: web
     name: luna-guardian-ai
     runtime: docker
-    plan: starter
+    plan: 0.5c-512mb
     healthCheckPath: /health
     envVars:
       - key: LUNA_ENV
