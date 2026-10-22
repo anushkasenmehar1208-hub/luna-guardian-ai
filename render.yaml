@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: luna-guardian-ai
+    runtime: docker
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: LUNA_ENV
+        value: production
+      - key: LUNA_DB_PATH
+        value: /var/data/luna.db
+      - key: LUNA_AUTH_TOKENS
+        sync: false
+      - key: LUNA_AGENT_PROVIDER
+        value: local
+    disk:
+      name: luna-data
+      mountPath: /var/data
+      sizeGB: 1
