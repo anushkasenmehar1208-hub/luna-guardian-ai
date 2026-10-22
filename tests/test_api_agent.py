@@ -19,6 +19,9 @@ def client():
 def test_authentication_is_required(client):
     assert client.get("/api/tasks").status_code == 401
     assert client.get("/health").status_code == 200
+    status = client.get("/api/status")
+    assert status.status_code == 200
+    assert status.json()["status"] == "ok"
 
 
 def test_single_generated_token_configuration(monkeypatch):

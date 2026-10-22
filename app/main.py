@@ -51,7 +51,7 @@ def _token_map() -> dict[str, str]:
 
 
 TOKENS = _token_map()
-PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/favicon.ico"}
+PUBLIC_PATHS = {"/", "/health", "/api/status", "/docs", "/openapi.json", "/favicon.ico"}
 
 
 class SecurityMiddleware:
@@ -306,6 +306,7 @@ def index() -> FileResponse:
 
 
 @app.get("/health")
+@app.get("/api/status")
 def health() -> dict:
     return {
         "status": "ok",
