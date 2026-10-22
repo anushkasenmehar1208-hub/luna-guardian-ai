@@ -116,7 +116,7 @@ python -m compileall -q app tests
 
 Verified locally on October 22, 2026:
 
-- 8 automated tests passed
+- 9 automated tests passed
 - Ruff passed
 - Python compilation passed
 - Real MCP initialization negotiated `2025-11-25`
@@ -138,7 +138,13 @@ The included `Dockerfile` and `render.yaml` run the application on Render's free
 
 Render's free web service sleeps after 15 minutes without inbound traffic. Its free PostgreSQL database is limited to 1 GB, has no backups, and expires 30 days after creation; this is suitable for a hackathon demo, not durable production storage.
 
-No public deployment or public repository is claimed until its URL is verified.
+### Verified public deployment
+
+- App: <https://luna-guardian-ai.onrender.com>
+- MCP endpoint: <https://luna-guardian-ai.onrender.com/mcp/>
+- Source: <https://github.com/anushkasenmehar1208-hub/luna-guardian-ai>
+
+Verified on October 22, 2026: the public health check and authenticated REST API returned successfully; an official MCP client negotiated protocol `2025-11-25`, discovered all nine tools, and executed `create_task` and `list_tasks`; data created before a web-service redeploy remained in PostgreSQL afterward.
 
 ## Project materials
 
