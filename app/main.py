@@ -1,38 +1,168 @@
-"""Luna Guardian: working REST UI plus real MCP Streamable HTTP server."""
+"""Luna Guardian REST application and authenticated MCP Streamable HTTP server."""
+
+from __future__ import annotations
+
+import json
+import os
+import time
+from collections import defaultdict, deque
 from contextlib import asynccontextmanager
+from contextvars import ContextVar
 from pathlib import Path
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from typing import Any
+
+import httpx
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import FileResponse, JSONResponse
 from mcp.server.fastmcp import FastMCP
-from . import core
+from pydantic import BaseModel, Field
 
-mcp = FastMCP('Luna Guardian', stateless_http=True, json_response=True, streamable_http_path='/')
+from . import agent, core
+
+current_user: ContextVar[str] = ContextVar("current_user", default="")
+
+
+def _token_map() -> dict[str, str]:
+    raw = os.getenv("LUNA_AUTH_TOKENS")
+    if raw:
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("LUNA_AUTH_TOKENS must be a JSON object mapping tokens to user IDs") from exc
+        if (
+            not isinstance(parsed, dict)
+            or not parsed
+            or not all(isinstance(k, str) and isinstance(v, str) for k, v in parsed.items())
+        ):
+            raise RuntimeError("LUNA_AUTH_TOKENS must be a non-empty string-to-string JSON object")
+        return parsed
+    if os.getenv("LUNA_ENV", "development") == "production":
+        raise RuntimeError("Set LUNA_AUTH_TOKENS before running in production")
+    return {"demo-token": "demo-student"}
+
+
+TOKENS = _token_map()
+PUBLIC_PATHS = {"/", "/health", "/docs", "/openapi.json", "/favicon.ico"}
+
+
+class SecurityMiddleware:
+    """Bearer authentication plus a small per-token request rate limit."""
+
+    def __init__(self, app: Any) -> None:
+        self.app = app
+        self.hits: dict[str, deque[float]] = defaultdict(deque)
+        self.limit = int(os.getenv("LUNA_RATE_LIMIT_PER_MINUTE", "120"))
+
+    async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if scope["type"] != "http" or scope.get("path") in PUBLIC_PATHS:
+            await self.app(scope, receive, send)
+            return
+        headers = {key.lower(): value for key, value in scope.get("headers", [])}
+        auth = headers.get(b"authorization", b"").decode("latin-1")
+        token = auth[7:] if auth.lower().startswith("bearer ") else ""
+        user_id = TOKENS.get(token)
+        if not user_id:
+            response = JSONResponse(
+                {"detail": "Valid Bearer token required"}, status_code=401, headers={"WWW-Authenticate": "Bearer"}
+            )
+            await response(scope, receive, send)
+            return
+        now = time.monotonic()
+        bucket = self.hits[token]
+        while bucket and bucket[0] < now - 60:
+            bucket.popleft()
+        if len(bucket) >= self.limit:
+            response = JSONResponse({"detail": "Rate limit exceeded"}, status_code=429, headers={"Retry-After": "60"})
+            await response(scope, receive, send)
+            return
+        bucket.append(now)
+        context_token = current_user.set(user_id)
+        try:
+            await self.app(scope, receive, send)
+        finally:
+            current_user.reset(context_token)
+
+
+def user() -> str:
+    value = current_user.get()
+    if not value:
+        raise HTTPException(401, "Authentication context unavailable")
+    return value
+
+
+def run_tool(name: str, arguments: dict[str, Any]) -> Any:
+    return agent.execute_tool(user(), name, arguments)
+
+
+mcp = FastMCP("Luna Guardian", stateless_http=True, json_response=True, streamable_http_path="/")
+
 
 @mcp.tool()
-def add_study_task(title: str, deadline: str, minutes: int) -> dict:
-    """Create a persistent task. Deadline requires an ISO-8601 timezone offset."""
-    return core.create_task(title, deadline, minutes)
+def create_task(
+    title: str, deadline: str, estimated_minutes: int, priority: int = 3, description: str = "", course: str = ""
+) -> dict:
+    """Create a persistent academic task. Deadline must include a timezone offset."""
+    return run_tool("create_task", locals())
+
 
 @mcp.tool()
-def get_study_tasks() -> list[dict]:
-    """Retrieve pending and completed tasks from persistent storage."""
-    return core.list_tasks()
+def list_tasks(status: str | None = None) -> list[dict]:
+    """List the authenticated student's persistent tasks, optionally filtered by status."""
+    return run_tool("list_tasks", {"status": status} if status else {})
+
 
 @mcp.tool()
-def generate_study_plan(start_at: str, available_minutes: int) -> dict:
-    """Allocate available minutes to upcoming tasks by deadline, 50-minute sessions."""
-    return core.build_plan(start_at, available_minutes)
+def update_task(
+    task_id: int,
+    title: str | None = None,
+    deadline: str | None = None,
+    estimated_minutes: int | None = None,
+    priority: int | None = None,
+    description: str | None = None,
+    course: str | None = None,
+    status: str | None = None,
+) -> dict:
+    """Update selected fields on a task owned by the authenticated student."""
+    return run_tool("update_task", {key: value for key, value in locals().items() if value is not None})
+
 
 @mcp.tool()
-def mark_task_completed(task_id: int) -> dict:
-    """Mark a task complete; cancel its planned sessions."""
-    return core.complete_task(task_id)
+def complete_task(task_id: int) -> dict:
+    """Mark a task complete and cancel its remaining planned sessions."""
+    return run_tool("complete_task", {"task_id": task_id})
+
 
 @mcp.tool()
-def get_study_sessions() -> list[dict]:
-    """Retrieve the current scheduled study sessions."""
-    return core.list_sessions()
+def create_study_plan(start_at: str, available_minutes: int) -> dict:
+    """Create and persist a deadline-prioritized plan with focused sessions."""
+    return run_tool("create_study_plan", locals())
+
+
+@mcp.tool()
+def get_study_plan(plan_id: int | None = None) -> dict | None:
+    """Get the latest or selected persisted study plan."""
+    return run_tool("get_study_plan", {"plan_id": plan_id} if plan_id else {})
+
+
+@mcp.tool()
+def replan_missed_session(session_id: int, start_at: str, available_minutes: int) -> dict:
+    """Mark a planned session missed and persist a replacement plan."""
+    return run_tool("replan_missed_session", locals())
+
+
+@mcp.tool()
+def get_student_context() -> dict:
+    """Read persistent preferences and academic commitments."""
+    return run_tool("get_student_context", {})
+
+
+@mcp.tool()
+def update_student_context(
+    timezone_name: str | None = None, preferences: dict | None = None, commitments: list[dict] | None = None
+) -> dict:
+    """Persist preferences, commitments, or the student's timezone."""
+    return run_tool("update_student_context", {key: value for key, value in locals().items() if value is not None})
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -41,47 +171,130 @@ async def lifespan(app: FastAPI):
     async with mcp.session_manager.run():
         yield
 
-app = FastAPI(title='Luna Guardian AI', lifespan=lifespan)
-app.mount('/mcp', mcp.streamable_http_app())
 
-class Task(BaseModel):
-    title: str
+app = FastAPI(title="Luna Guardian AI", version="0.2.0", lifespan=lifespan)
+app.mount("/mcp", mcp.streamable_http_app())
+app.add_middleware(SecurityMiddleware)
+
+
+class TaskCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
     deadline: str
-    minutes: int = Field(ge=1, le=1440)
+    estimated_minutes: int = Field(ge=1, le=10080)
+    priority: int = Field(default=3, ge=1, le=5)
+    description: str = Field(default="", max_length=2000)
+    course: str = Field(default="", max_length=100)
 
-class Plan(BaseModel):
+
+class TaskUpdate(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    deadline: str | None = None
+    estimated_minutes: int | None = Field(default=None, ge=1, le=10080)
+    priority: int | None = Field(default=None, ge=1, le=5)
+    description: str | None = Field(default=None, max_length=2000)
+    course: str | None = Field(default=None, max_length=100)
+    status: str | None = None
+
+
+class PlanCreate(BaseModel):
     start_at: str
     available_minutes: int = Field(ge=1, le=1440)
 
-@app.get('/')
-def index():
-    return FileResponse(Path(__file__).resolve().parent.parent / 'static' / 'index.html')
 
-@app.get('/api/tasks')
-def tasks():
-    return core.list_tasks()
+class Replan(PlanCreate):
+    session_id: int = Field(gt=0)
 
-@app.post('/api/tasks')
-def add_task(task: Task):
+
+class AgentMessage(BaseModel):
+    message: str = Field(min_length=1, max_length=4000)
+
+
+class StudentContextUpdate(BaseModel):
+    timezone_name: str | None = Field(default=None, max_length=100)
+    preferences: dict[str, Any] | None = None
+    commitments: list[dict[str, Any]] | None = None
+
+
+@app.exception_handler(ValueError)
+async def value_error_handler(_: Request, exc: ValueError) -> JSONResponse:
+    return JSONResponse({"detail": str(exc)}, status_code=400)
+
+
+@app.get("/")
+def index() -> FileResponse:
+    return FileResponse(Path(__file__).resolve().parent.parent / "static" / "index.html")
+
+
+@app.get("/health")
+def health() -> dict:
+    return {"status": "ok", "service": "luna-guardian", "agent_provider": os.getenv("LUNA_AGENT_PROVIDER", "local")}
+
+
+@app.get("/api/tasks")
+def api_list_tasks(status: str | None = None, user_id: str = Depends(user)) -> list[dict]:
+    return core.list_tasks(user_id, status)
+
+
+@app.post("/api/tasks", status_code=201)
+def api_create_task(data: TaskCreate, user_id: str = Depends(user)) -> dict:
+    return agent.execute_tool(user_id, "create_task", data.model_dump())
+
+
+@app.patch("/api/tasks/{task_id}")
+def api_update_task(task_id: int, data: TaskUpdate, user_id: str = Depends(user)) -> dict:
+    return agent.execute_tool(user_id, "update_task", {"task_id": task_id, **data.model_dump(exclude_none=True)})
+
+
+@app.post("/api/tasks/{task_id}/complete")
+def api_complete_task(task_id: int, user_id: str = Depends(user)) -> dict:
+    return agent.execute_tool(user_id, "complete_task", {"task_id": task_id})
+
+
+@app.post("/api/plans", status_code=201)
+def api_create_plan(data: PlanCreate, user_id: str = Depends(user)) -> dict:
+    return agent.execute_tool(user_id, "create_study_plan", data.model_dump())
+
+
+@app.get("/api/plans/current")
+def api_get_plan(user_id: str = Depends(user)) -> dict | None:
+    return core.get_study_plan(user_id)
+
+
+@app.post("/api/plans/replan")
+def api_replan(data: Replan, user_id: str = Depends(user)) -> dict:
+    return agent.execute_tool(user_id, "replan_missed_session", data.model_dump())
+
+
+@app.get("/api/sessions")
+def api_sessions(active_only: bool = True, user_id: str = Depends(user)) -> list[dict]:
+    return core.list_sessions(user_id, active_only)
+
+
+@app.post("/api/sessions/{session_id}/complete")
+def api_complete_session(session_id: int, user_id: str = Depends(user)) -> dict:
+    result = core.complete_session(user_id, session_id)
+    core.log_activity(user_id, "complete_session", {"session_id": session_id}, "success", result, 1)
+    return result
+
+
+@app.get("/api/context")
+def api_get_context(user_id: str = Depends(user)) -> dict:
+    return core.get_student_context(user_id)
+
+
+@app.put("/api/context")
+def api_update_context(data: StudentContextUpdate, user_id: str = Depends(user)) -> dict:
+    return agent.execute_tool(user_id, "update_student_context", data.model_dump(exclude_none=True))
+
+
+@app.post("/api/agent")
+def api_agent(data: AgentMessage, user_id: str = Depends(user)) -> dict:
     try:
-        return core.create_task(**task.model_dump())
-    except ValueError as e:
-        raise HTTPException(400, str(e)) from e
+        return agent.respond(user_id, data.message)
+    except (RuntimeError, httpx.HTTPError) as exc:  # type: ignore[name-defined]
+        raise HTTPException(502, str(exc)) from exc
 
-@app.post('/api/tasks/{task_id}/complete')
-def finish(task_id: int):
-    try:
-        return core.complete_task(task_id)
-    except ValueError as e:
-        raise HTTPException(404, str(e)) from e
 
-@app.post('/api/plan')
-def plan(data: Plan):
-    try:
-        return core.build_plan(**data.model_dump())
-    except ValueError as e:
-        raise HTTPException(400, str(e)) from e
-
-@app.get('/api/sessions')
-def sessions():
-    return core.list_sessions()
+@app.get("/api/activity")
+def api_activity(limit: int = 50, user_id: str = Depends(user)) -> list[dict]:
+    return core.list_activity(user_id, limit)
