@@ -380,8 +380,12 @@ def api_agent(data: AgentMessage, user_id: str = Depends(user)) -> dict:
         result = agent.respond(user_id, data.message, execute_mcp_tool if use_mcp else agent.execute_tool)
         result["tool_transport"] = "mcp" if use_mcp else "direct"
         return result
-    except (RuntimeError, httpx.HTTPError) as exc:  # type: ignore[name-defined]
+    except agent.ProviderUnavailableError as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except agent.ProviderRequestError as exc:
         raise HTTPException(502, str(exc)) from exc
+    except (RuntimeError, httpx.HTTPError) as exc:  # type: ignore[name-defined]
+        raise HTTPException(502, "Luna could not complete that request safely.") from exc
 
 
 @app.get("/api/activity")

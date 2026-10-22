@@ -1,6 +1,7 @@
 import json
 from types import SimpleNamespace
 
+import httpx
 import pytest
 from fastapi.testclient import TestClient
 
@@ -146,6 +147,49 @@ def test_openai_provider_chooses_tools_through_injected_executor(monkeypatch):
     assert [call[1] for call in calls] == ["create_task", "create_study_plan"]
     assert all(call[3] == "req-1" for call in calls)
     assert [step["status"] for step in result["steps"]] == ["success", "success"]
+
+
+def test_openai_provider_retries_and_sanitizes_transient_failures(monkeypatch):
+    monkeypatch.setenv("LUNA_OPENAI_API_KEY", "test-key")
+    monkeypatch.setattr(agent.time, "sleep", lambda _: None)
+    attempts = []
+
+    class UnavailableClient:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def post(self, url, **kwargs):
+            attempts.append(url)
+            request = httpx.Request("POST", url)
+            response = httpx.Response(503, request=request)
+            raise httpx.HTTPStatusError("provider URL must not escape", request=request, response=response)
+
+    monkeypatch.setattr(agent.httpx, "Client", UnavailableClient)
+    with pytest.raises(agent.ProviderUnavailableError) as caught:
+        agent._run_openai("student", "hi", "req-retry")
+
+    assert len(attempts) == 3
+    assert str(caught.value) == "The AI service is temporarily unavailable. Please try again in a moment."
+    assert "http" not in str(caught.value).lower()
+
+
+def test_api_agent_returns_safe_provider_unavailable_response(client, monkeypatch):
+    def unavailable(*args, **kwargs):
+        raise agent.ProviderUnavailableError("The AI service is temporarily unavailable. Please try again in a moment.")
+
+    monkeypatch.setattr(agent, "respond", unavailable)
+    response = client.post("/api/agent", headers=HEADERS, json={"message": "hi"})
+
+    assert response.status_code == 503
+    assert response.json() == {
+        "detail": "The AI service is temporarily unavailable. Please try again in a moment."
+    }
 
 
 def test_exact_exam_request_does_not_claim_assignment_assumptions(monkeypatch):

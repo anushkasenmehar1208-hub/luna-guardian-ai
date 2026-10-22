@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import uuid
 from datetime import timedelta
 from typing import Any, Callable
@@ -15,6 +16,14 @@ from . import core
 
 Tool = Callable[..., Any]
 ToolExecutor = Callable[[str, str, dict[str, Any], str | None], Any]
+
+
+class ProviderUnavailableError(RuntimeError):
+    """The configured model provider is temporarily unavailable."""
+
+
+class ProviderRequestError(RuntimeError):
+    """The configured model provider rejected or could not process the request."""
 
 
 def _tools(user_id: str) -> dict[str, Tool]:
@@ -127,6 +136,29 @@ Dates must be ISO-8601 with timezone offsets. After creating commitments, make a
 Explain assumptions clearly. Current UTC time: {now}."""
 
 
+def _post_openai_chat(client: httpx.Client, url: str, headers: dict, payload: dict) -> dict[str, Any]:
+    retryable_statuses = {429, 500, 502, 503, 504}
+    for attempt in range(3):
+        try:
+            response = client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            return response.json()
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code not in retryable_statuses:
+                raise ProviderRequestError("The AI service could not process that request.") from exc
+            if attempt == 2:
+                raise ProviderUnavailableError(
+                    "The AI service is temporarily unavailable. Please try again in a moment."
+                ) from exc
+        except httpx.RequestError as exc:
+            if attempt == 2:
+                raise ProviderUnavailableError(
+                    "The AI service is temporarily unavailable. Please try again in a moment."
+                ) from exc
+        time.sleep(0.4 * (2**attempt))
+    raise ProviderUnavailableError("The AI service is temporarily unavailable. Please try again in a moment.")
+
+
 def _run_openai(
     user_id: str, text: str, request_id: str, tool_executor: ToolExecutor = execute_tool
 ) -> dict[str, Any]:
@@ -142,13 +174,13 @@ def _run_openai(
     steps = []
     with httpx.Client(timeout=45) as client:
         for _ in range(8):
-            response = client.post(
+            payload = _post_openai_chat(
+                client,
                 f"{base_url}/chat/completions",
-                headers={"Authorization": f"Bearer {api_key}"},
-                json={"model": model, "messages": messages, "tools": TOOL_SCHEMAS, "tool_choice": "auto"},
+                {"Authorization": f"Bearer {api_key}"},
+                {"model": model, "messages": messages, "tools": TOOL_SCHEMAS, "tool_choice": "auto"},
             )
-            response.raise_for_status()
-            message = response.json()["choices"][0]["message"]
+            message = payload["choices"][0]["message"]
             messages.append(message)
             calls = message.get("tool_calls", [])
             if not calls:
