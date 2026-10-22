@@ -116,7 +116,7 @@ python -m compileall -q app tests
 
 Verified locally on October 22, 2026:
 
-- 11 automated tests passed
+- 12 automated tests passed
 - Ruff passed
 - Python compilation passed
 - Real MCP initialization negotiated `2025-11-25`

@@ -16,7 +16,11 @@ services:
       - key: LUNA_AUTH_USER_ID
         value: luna-submission-demo
       - key: LUNA_AGENT_PROVIDER
-        value: local
+        value: openai-compatible
+      - key: LUNA_OPENAI_BASE_URL
+        value: https://generativelanguage.googleapis.com/v1beta/openai
+      - key: LUNA_OPENAI_MODEL
+        value: gemini-3.1-flash-lite
       - key: LUNA_AGENT_TOOL_TRANSPORT
         value: mcp
 

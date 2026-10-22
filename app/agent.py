@@ -307,8 +307,14 @@ def _run_local(
     available = _duration_minutes(text)
     if created and available:
         plan = call("create_study_plan", start_at=core.now_utc().isoformat(), available_minutes=available)
+        assumption = (
+            " I assumed each unnamed assignment needs 60 minutes and is due in two days; tell me the real details "
+            "and I’ll update them."
+            if count_match
+            else ""
+        )
         return {
-            "message": f"I saved {len(created)} task(s) and created plan #{plan['plan_id']} with {len(plan['sessions'])} focused session(s). I assumed each unnamed assignment needs 60 minutes and is due in two days; tell me the real details and I’ll update them.",
+            "message": f"I saved {len(created)} task(s) and created plan #{plan['plan_id']} with {len(plan['sessions'])} focused session(s).{assumption}",
             "steps": steps,
             "provider": "local-rules",
         }

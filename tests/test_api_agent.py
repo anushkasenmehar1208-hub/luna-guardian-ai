@@ -145,6 +145,26 @@ def test_openai_provider_chooses_tools_through_injected_executor(monkeypatch):
     assert [step["status"] for step in result["steps"]] == ["success", "success"]
 
 
+def test_exact_exam_request_does_not_claim_assignment_assumptions(monkeypatch):
+    calls = []
+
+    def execute(user_id, name, arguments, request_id):
+        calls.append(name)
+        if name == "create_task":
+            return {"id": 1, **arguments, "status": "pending"}
+        return {"plan_id": 2, "sessions": [{"id": 1}, {"id": 2}, {"id": 3}]}
+
+    result = agent._run_local(
+        "student",
+        "I have a Java exam tomorrow. Create a revision task and schedule two hours of study.",
+        "req-exact",
+        execute,
+    )
+
+    assert calls == ["create_task", "create_study_plan"]
+    assert "assignment" not in result["message"].lower()
+
+
 def test_mcp_result_payload_is_decoded():
     result = SimpleNamespace(
         isError=False,
