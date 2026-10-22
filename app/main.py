@@ -36,8 +36,11 @@ def _token_map() -> dict[str, str]:
         ):
             raise RuntimeError("LUNA_AUTH_TOKENS must be a non-empty string-to-string JSON object")
         return parsed
+    generated_token = os.getenv("LUNA_AUTH_TOKEN")
+    if generated_token:
+        return {generated_token: os.getenv("LUNA_AUTH_USER_ID", "demo-student")}
     if os.getenv("LUNA_ENV", "development") == "production":
-        raise RuntimeError("Set LUNA_AUTH_TOKENS before running in production")
+        raise RuntimeError("Set LUNA_AUTH_TOKENS or LUNA_AUTH_TOKEN before running in production")
     return {"demo-token": "demo-student"}
 
 

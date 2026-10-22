@@ -46,7 +46,7 @@ cp .env.example .env
 uvicorn app.main:app --reload
 ```
 
-Open <http://127.0.0.1:8000>. The development fallback bearer token is `demo-token`. Production refuses to start without `LUNA_AUTH_TOKENS`.
+Open <http://127.0.0.1:8000>. The development fallback bearer token is `demo-token`. Production refuses to start without `LUNA_AUTH_TOKENS` or `LUNA_AUTH_TOKEN`.
 
 ### Configuration
 
@@ -54,6 +54,8 @@ Open <http://127.0.0.1:8000>. The development fallback bearer token is `demo-tok
 |---|---|
 | `LUNA_ENV` | `development` or `production` |
 | `LUNA_AUTH_TOKENS` | JSON object mapping opaque bearer tokens to stable user IDs |
+| `LUNA_AUTH_TOKEN` | Alternative single opaque token; generated automatically by the Render Blueprint |
+| `LUNA_AUTH_USER_ID` | User identity associated with `LUNA_AUTH_TOKEN` |
 | `LUNA_DB_PATH` | SQLite database path; use persistent storage in production |
 | `LUNA_RATE_LIMIT_PER_MINUTE` | Per-token request limit, default `120` |
 | `LUNA_AGENT_PROVIDER` | `local`, `bedrock`, or `openai-compatible` |
@@ -127,11 +129,10 @@ Browser speech recognition depends on browser support and microphone permission.
 
 The included `Dockerfile` and `render.yaml` run the application on Render with a persistent disk. Before deployment:
 
-1. Generate a long random token.
-2. Set `LUNA_AUTH_TOKENS` as a secret JSON object such as `{"token":"student-1"}`.
-3. Mount persistent storage at `/var/data`; the blueprint sets `LUNA_DB_PATH=/var/data/luna.db`.
-4. Configure an LLM provider and its credentials.
-5. Verify `/health`, load the dashboard, and repeat the official MCP client check against HTTPS.
+1. Let the Blueprint generate `LUNA_AUTH_TOKEN`, or provide `LUNA_AUTH_TOKENS` through Render's secret controls.
+2. Mount persistent storage at `/var/data`; the blueprint sets `LUNA_DB_PATH=/var/data/luna.db`.
+3. Configure an LLM provider and its credentials.
+4. Verify `/health`, load the dashboard, and repeat the official MCP client check against HTTPS.
 
 No public deployment or public repository is claimed until its URL is verified.
 

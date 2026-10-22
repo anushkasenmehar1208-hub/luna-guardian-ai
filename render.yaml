@@ -9,8 +9,10 @@ services:
         value: production
       - key: LUNA_DB_PATH
         value: /var/data/luna.db
-      - key: LUNA_AUTH_TOKENS
-        sync: false
+      - key: LUNA_AUTH_TOKEN
+        generateValue: true
+      - key: LUNA_AUTH_USER_ID
+        value: demo-student
       - key: LUNA_AGENT_PROVIDER
         value: local
     disk:

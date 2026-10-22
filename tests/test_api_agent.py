@@ -1,6 +1,7 @@
 import pytest
 from fastapi.testclient import TestClient
 
+from app import main
 from app.main import app
 
 HEADERS = {"Authorization": "Bearer demo-token"}
@@ -15,6 +16,13 @@ def client():
 def test_authentication_is_required(client):
     assert client.get("/api/tasks").status_code == 401
     assert client.get("/health").status_code == 200
+
+
+def test_single_generated_token_configuration(monkeypatch):
+    monkeypatch.delenv("LUNA_AUTH_TOKENS", raising=False)
+    monkeypatch.setenv("LUNA_AUTH_TOKEN", "generated-secret")
+    monkeypatch.setenv("LUNA_AUTH_USER_ID", "render-student")
+    assert main._token_map() == {"generated-secret": "render-student"}
 
 
 def test_natural_language_agent_executes_and_persists_tools(client):
