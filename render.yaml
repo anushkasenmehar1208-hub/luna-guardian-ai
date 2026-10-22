@@ -14,9 +14,11 @@ services:
       - key: LUNA_AUTH_TOKEN
         generateValue: true
       - key: LUNA_AUTH_USER_ID
-        value: demo-student
+        value: luna-submission-demo
       - key: LUNA_AGENT_PROVIDER
         value: local
+      - key: LUNA_AGENT_TOOL_TRANSPORT
+        value: mcp
 
 databases:
   - name: luna-guardian-db

@@ -22,17 +22,15 @@ Browser voice/text
       │
       ▼
 FastAPI /api/agent ──► provider (Bedrock / OpenAI-compatible / local rules)
-      │                              │
-      └──────── real tool calls ◄────┘
-                     │
-                     ▼
-              domain service ──► SQLite / PostgreSQL
-                     ▲
-                     │
-MCP client ── Streamable HTTP /mcp/ ── bearer auth
+                                     │ model-selected tools
+                                     ▼
+official MCP client ── authenticated Streamable HTTP /mcp/
+                                     │
+                                     ▼
+                              domain service ──► SQLite / PostgreSQL
 ```
 
-The REST simulator and MCP server call the same domain functions. The activity timeline is derived from persisted execution records; it is not fabricated UI state.
+Production routes model-selected state changes through the MCP boundary; direct execution remains available for local development. The REST dashboard reads the same persisted domain state. The activity timeline is derived from execution records and grouped by the agent request ID; it is not fabricated UI state.
 
 ## Local setup
 
@@ -61,6 +59,8 @@ Open <http://127.0.0.1:8000>. The development fallback bearer token is `demo-tok
 | `LUNA_PUBLIC_HOST` | Optional public hostname override for MCP DNS-rebinding protection; Render injects its hostname automatically |
 | `LUNA_RATE_LIMIT_PER_MINUTE` | Per-token request limit, default `120` |
 | `LUNA_AGENT_PROVIDER` | `local`, `bedrock`, or `openai-compatible` |
+| `LUNA_AGENT_TOOL_TRANSPORT` | `mcp` routes agent-selected actions through the authenticated MCP endpoint; `direct` is the local-development fallback |
+| `LUNA_MCP_URL` | Optional MCP endpoint override; production defaults to the local authenticated Streamable HTTP endpoint |
 | `AWS_REGION` | Bedrock region |
 | `LUNA_BEDROCK_MODEL` | Bedrock Converse model ID |
 | `LUNA_OPENAI_BASE_URL` | OpenAI-compatible `/v1` base URL |
@@ -116,12 +116,13 @@ python -m compileall -q app tests
 
 Verified locally on October 22, 2026:
 
-- 9 automated tests passed
+- 11 automated tests passed
 - Ruff passed
 - Python compilation passed
 - Real MCP initialization negotiated `2025-11-25`
 - All nine required tools were discovered
 - Authenticated MCP `create_task` and `list_tasks` calls succeeded and persisted data
+- The exact Java-exam request completed locally through `/api/agent` → authenticated MCP → persistence with one shared request ID; the equivalent live LLM run remains required before submission
 
 GitHub Actions workflows are present in both repositories, but the initial hosted job was rejected before executing any step because the GitHub account was locked for a billing issue. See the friction log; this is not reported as a test failure or a passing CI run.
 
@@ -151,7 +152,9 @@ Verified on October 22, 2026: the public health check and authenticated REST API
 - [Demo script](docs/demo-script.md)
 - [Devpost project story](docs/devpost-story.md)
 - [Amazon developer product feedback](docs/amazon-feedback.md)
+- [Complete product feedback draft](docs/product-feedback.md)
 - [Development friction log](docs/friction-log.md)
+- [Official submission audit](docs/submission-audit.md)
 - [Security notes](SECURITY.md)
 
 ## License

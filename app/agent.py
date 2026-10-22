@@ -14,6 +14,7 @@ import httpx
 from . import core
 
 Tool = Callable[..., Any]
+ToolExecutor = Callable[[str, str, dict[str, Any], str | None], Any]
 
 
 def _tools(user_id: str) -> dict[str, Tool]:
@@ -126,7 +127,9 @@ Dates must be ISO-8601 with timezone offsets. After creating commitments, make a
 Explain assumptions clearly. Current UTC time: {now}."""
 
 
-def _run_openai(user_id: str, text: str, request_id: str) -> dict[str, Any]:
+def _run_openai(
+    user_id: str, text: str, request_id: str, tool_executor: ToolExecutor = execute_tool
+) -> dict[str, Any]:
     api_key = os.getenv("LUNA_OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("LUNA_OPENAI_API_KEY is required for the openai provider")
@@ -154,7 +157,7 @@ def _run_openai(user_id: str, text: str, request_id: str) -> dict[str, Any]:
                 name = call["function"]["name"]
                 args = json.loads(call["function"].get("arguments") or "{}")
                 try:
-                    result = execute_tool(user_id, name, args, request_id)
+                    result = tool_executor(user_id, name, args, request_id)
                     steps.append({"tool": name, "arguments": args, "status": "success", "result": result})
                     content = json.dumps(result)
                 except Exception as exc:
@@ -164,7 +167,9 @@ def _run_openai(user_id: str, text: str, request_id: str) -> dict[str, Any]:
     raise RuntimeError("Agent exceeded its tool-call limit")
 
 
-def _run_bedrock(user_id: str, text: str, request_id: str) -> dict[str, Any]:
+def _run_bedrock(
+    user_id: str, text: str, request_id: str, tool_executor: ToolExecutor = execute_tool
+) -> dict[str, Any]:
     try:
         import boto3
     except ImportError as exc:
@@ -199,7 +204,7 @@ def _run_bedrock(user_id: str, text: str, request_id: str) -> dict[str, Any]:
         results = []
         for use in uses:
             try:
-                result = execute_tool(user_id, use["name"], use.get("input", {}), request_id)
+                result = tool_executor(user_id, use["name"], use.get("input", {}), request_id)
                 steps.append(
                     {"tool": use["name"], "arguments": use.get("input", {}), "status": "success", "result": result}
                 )
@@ -227,14 +232,16 @@ def _duration_minutes(text: str) -> int | None:
     return round(value * 60 if match.group(2).lower().startswith(("h", "hr")) else value)
 
 
-def _run_local(user_id: str, text: str, request_id: str) -> dict[str, Any]:
+def _run_local(
+    user_id: str, text: str, request_id: str, tool_executor: ToolExecutor = execute_tool
+) -> dict[str, Any]:
     """Offline demo planner. It is deterministic and is labelled as such in every response."""
     lowered = text.lower()
     steps = []
 
     def call(name: str, **args: Any) -> Any:
         try:
-            result = execute_tool(user_id, name, args, request_id)
+            result = tool_executor(user_id, name, args, request_id)
             steps.append({"tool": name, "arguments": args, "status": "success", "result": result})
             return result
         except Exception as exc:
@@ -325,17 +332,17 @@ def _run_local(user_id: str, text: str, request_id: str) -> dict[str, Any]:
     }
 
 
-def respond(user_id: str, text: str) -> dict[str, Any]:
+def respond(user_id: str, text: str, tool_executor: ToolExecutor = execute_tool) -> dict[str, Any]:
     if not text.strip() or len(text) > 4000:
         raise ValueError("Message must be between 1 and 4000 characters")
     request_id = str(uuid.uuid4())
     provider = os.getenv("LUNA_AGENT_PROVIDER", "local").lower()
     if provider == "bedrock":
-        result = _run_bedrock(user_id, text, request_id)
+        result = _run_bedrock(user_id, text, request_id, tool_executor)
     elif provider in {"openai", "openai-compatible"}:
-        result = _run_openai(user_id, text, request_id)
+        result = _run_openai(user_id, text, request_id, tool_executor)
     elif provider == "local":
-        result = _run_local(user_id, text, request_id)
+        result = _run_local(user_id, text, request_id, tool_executor)
     else:
         raise RuntimeError(f"Unsupported LUNA_AGENT_PROVIDER: {provider}")
     result["request_id"] = request_id

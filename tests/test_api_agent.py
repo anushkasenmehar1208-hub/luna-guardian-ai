@@ -1,7 +1,10 @@
+import json
+from types import SimpleNamespace
+
 import pytest
 from fastapi.testclient import TestClient
 
-from app import main
+from app import agent, main
 from app.main import app
 
 HEADERS = {"Authorization": "Bearer demo-token"}
@@ -42,6 +45,7 @@ def test_natural_language_agent_executes_and_persists_tools(client):
     assert response.status_code == 200, response.text
     data = response.json()
     assert data["provider"] == "local-rules"
+    assert data["tool_transport"] == "direct"
     assert [step["tool"] for step in data["steps"]].count("create_task") == 3
     assert data["steps"][-1]["tool"] == "create_study_plan"
     tasks = client.get("/api/tasks", headers=HEADERS).json()
@@ -50,6 +54,104 @@ def test_natural_language_agent_executes_and_persists_tools(client):
     assert len(tasks) == 3
     assert sessions
     assert any(item["tool_name"] == "create_study_plan" for item in activity)
+    assert all(item["request_id"] == data["request_id"] for item in activity[:4])
+
+
+def test_openai_provider_chooses_tools_through_injected_executor(monkeypatch):
+    monkeypatch.setenv("LUNA_OPENAI_API_KEY", "test-key")
+    responses = [
+        {
+            "choices": [
+                {
+                    "message": {
+                        "role": "assistant",
+                        "content": None,
+                        "tool_calls": [
+                            {
+                                "id": "call-task",
+                                "type": "function",
+                                "function": {
+                                    "name": "create_task",
+                                    "arguments": json.dumps(
+                                        {
+                                            "title": "Java exam revision",
+                                            "deadline": "2026-10-23T23:59:00+05:30",
+                                            "estimated_minutes": 120,
+                                            "priority": 5,
+                                        }
+                                    ),
+                                },
+                            },
+                            {
+                                "id": "call-plan",
+                                "type": "function",
+                                "function": {
+                                    "name": "create_study_plan",
+                                    "arguments": json.dumps(
+                                        {
+                                            "start_at": "2026-10-22T18:00:00+05:30",
+                                            "available_minutes": 120,
+                                        }
+                                    ),
+                                },
+                            },
+                        ],
+                    }
+                }
+            ]
+        },
+        {"choices": [{"message": {"role": "assistant", "content": "Your revision plan is ready."}}]},
+    ]
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            return None
+
+        def json(self):
+            return self.payload
+
+    class FakeClient:
+        def __init__(self, *args, **kwargs):
+            self.requests = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def post(self, url, **kwargs):
+            self.requests.append((url, kwargs))
+            return FakeResponse(responses.pop(0))
+
+    monkeypatch.setattr(agent.httpx, "Client", FakeClient)
+    calls = []
+
+    def execute(user_id, name, arguments, request_id):
+        calls.append((user_id, name, arguments, request_id))
+        if name == "create_task":
+            return {"id": 41, **arguments, "status": "pending"}
+        return {"plan_id": 7, "sessions": [{"id": 9, "minutes": 120}]}
+
+    result = agent._run_openai("student", "Create my Java revision plan", "req-1", execute)
+
+    assert result["provider"] == "openai-compatible"
+    assert result["message"] == "Your revision plan is ready."
+    assert [call[1] for call in calls] == ["create_task", "create_study_plan"]
+    assert all(call[3] == "req-1" for call in calls)
+    assert [step["status"] for step in result["steps"]] == ["success", "success"]
+
+
+def test_mcp_result_payload_is_decoded():
+    result = SimpleNamespace(
+        isError=False,
+        content=[SimpleNamespace(text='{"plan_id": 7, "sessions": []}')],
+        structuredContent=None,
+    )
+    assert main._mcp_result_value(result) == {"plan_id": 7, "sessions": []}
 
 
 def test_api_validation_and_task_completion(client):

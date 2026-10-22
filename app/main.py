@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 import time
@@ -14,6 +15,8 @@ from typing import Any
 import httpx
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, JSONResponse
+from mcp import ClientSession
+from mcp.client.streamable_http import streamable_http_client
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 from pydantic import BaseModel, Field
@@ -21,6 +24,8 @@ from pydantic import BaseModel, Field
 from . import agent, core
 
 current_user: ContextVar[str] = ContextVar("current_user", default="")
+current_auth_token: ContextVar[str] = ContextVar("current_auth_token", default="")
+current_request_id: ContextVar[str] = ContextVar("current_request_id", default="")
 
 
 def _token_map() -> dict[str, str]:
@@ -81,9 +86,14 @@ class SecurityMiddleware:
             return
         bucket.append(now)
         context_token = current_user.set(user_id)
+        auth_token = current_auth_token.set(token)
+        request_id = headers.get(b"x-luna-request-id", b"").decode("latin-1")[:100]
+        request_token = current_request_id.set(request_id)
         try:
             await self.app(scope, receive, send)
         finally:
+            current_request_id.reset(request_token)
+            current_auth_token.reset(auth_token)
             current_user.reset(context_token)
 
 
@@ -95,7 +105,52 @@ def user() -> str:
 
 
 def run_tool(name: str, arguments: dict[str, Any]) -> Any:
-    return agent.execute_tool(user(), name, arguments)
+    return agent.execute_tool(user(), name, arguments, current_request_id.get() or None)
+
+
+def _mcp_url() -> str:
+    configured = os.getenv("LUNA_MCP_URL")
+    if configured:
+        return configured.rstrip("/") + "/"
+    return f"http://127.0.0.1:{os.getenv('PORT', '8000')}/mcp/"
+
+
+def _mcp_result_value(result: Any) -> Any:
+    if result.isError:
+        details = " ".join(getattr(block, "text", "") for block in result.content).strip()
+        raise RuntimeError(details or "MCP tool execution failed")
+    for block in result.content:
+        text = getattr(block, "text", None)
+        if text:
+            try:
+                return json.loads(text)
+            except json.JSONDecodeError:
+                return text
+    if result.structuredContent is not None:
+        structured = result.structuredContent
+        if isinstance(structured, dict) and set(structured) == {"result"}:
+            return structured["result"]
+        return structured
+    return None
+
+
+async def _execute_mcp_tool_async(name: str, arguments: dict[str, Any], request_id: str | None) -> Any:
+    token = current_auth_token.get()
+    if not token:
+        raise RuntimeError("Authenticated MCP tool execution requires the caller's bearer token")
+    headers = {"Authorization": f"Bearer {token}"}
+    if request_id:
+        headers["X-Luna-Request-ID"] = request_id
+    async with httpx.AsyncClient(headers=headers, timeout=45, follow_redirects=True) as client:
+        async with streamable_http_client(_mcp_url(), http_client=client) as (read, write, _):
+            async with ClientSession(read, write) as session:
+                await session.initialize()
+                return _mcp_result_value(await session.call_tool(name, arguments))
+
+
+def execute_mcp_tool(user_id: str, name: str, arguments: dict[str, Any], request_id: str | None = None) -> Any:
+    del user_id  # Identity is enforced by the bearer token at the MCP boundary.
+    return asyncio.run(_execute_mcp_tool_async(name, arguments, request_id))
 
 
 def _mcp_transport_security() -> TransportSecuritySettings:
@@ -252,7 +307,12 @@ def index() -> FileResponse:
 
 @app.get("/health")
 def health() -> dict:
-    return {"status": "ok", "service": "luna-guardian", "agent_provider": os.getenv("LUNA_AGENT_PROVIDER", "local")}
+    return {
+        "status": "ok",
+        "service": "luna-guardian",
+        "agent_provider": os.getenv("LUNA_AGENT_PROVIDER", "local"),
+        "agent_tool_transport": os.getenv("LUNA_AGENT_TOOL_TRANSPORT", "direct"),
+    }
 
 
 @app.get("/api/tasks")
@@ -315,7 +375,10 @@ def api_update_context(data: StudentContextUpdate, user_id: str = Depends(user))
 @app.post("/api/agent")
 def api_agent(data: AgentMessage, user_id: str = Depends(user)) -> dict:
     try:
-        return agent.respond(user_id, data.message)
+        use_mcp = os.getenv("LUNA_AGENT_TOOL_TRANSPORT", "direct").lower() == "mcp"
+        result = agent.respond(user_id, data.message, execute_mcp_tool if use_mcp else agent.execute_tool)
+        result["tool_transport"] = "mcp" if use_mcp else "direct"
+        return result
     except (RuntimeError, httpx.HTTPError) as exc:  # type: ignore[name-defined]
         raise HTTPException(502, str(exc)) from exc
 

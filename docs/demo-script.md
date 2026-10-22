@@ -6,9 +6,9 @@
 
 **0:15–0:50 — Lead with agent execution**
 
-Use the microphone or paste: “I have a Java exam tomorrow, two assignments, and three hours available.”
+Use the microphone or paste: “I have a Java exam tomorrow. Create a revision task and schedule two hours of study.”
 
-“Luna understands the commitments, executes real tools, saves three tasks, and creates a deadline-prioritized study plan. These steps are not an animation: each tool name, argument set, result, and database change is recorded.”
+“The language model interprets the request and selects `create_task` and `create_study_plan`. Those calls travel through Luna's authenticated MCP endpoint, persist the task and sessions, and return their real results. These steps are not an animation: each request ID, tool name, argument set, result, and database change is recorded.”
 
 Point to the priorities, schedule, upcoming deadlines, and activity timeline.
 
@@ -16,7 +16,7 @@ Point to the priorities, schedule, upcoming deadlines, and activity timeline.
 
 Refresh the page.
 
-“The state survives refresh because tasks, plans, sessions, context, and progress are persisted in SQLite. The dashboard reads the saved state rather than reconstructing a conversation.”
+“The state survives refresh because tasks, plans, sessions, context, and progress are persisted in PostgreSQL. The dashboard reads the saved state rather than reconstructing a conversation.”
 
 Complete one task.
 
@@ -32,13 +32,13 @@ Choose “Missed” on a session and enter 120 remaining minutes.
 
 Show the MCP client output.
 
-“This is a real authenticated Streamable HTTP MCP server using the official Python SDK. The client negotiates protocol 2025-11-25, discovers all nine tools, and executes the same persistence operations used by the simulator.”
+“This is a real authenticated Streamable HTTP MCP server using the official Python SDK. The client negotiates protocol 2025-11-25, discovers all nine tools, and the live agent invokes those tools through this endpoint.”
 
 **2:15–2:40 — Voice, safety, and provider honesty**
 
 “Browser speech provides microphone input, visible transcription, text fallback, and optional spoken replies. User data is isolated by bearer identity, input is validated, requests are rate-limited, and secrets stay in environment variables.”
 
-If Bedrock is verified before recording: “The agent is powered by Amazon Bedrock through the Converse tool-use API.” Otherwise say: “Bedrock support is implemented but not claimed in this demo because credentials were unavailable for live verification.”
+Name only the provider shown in the live status bar. Do not say that Luna is powered by Amazon Bedrock unless a credentialed live Bedrock run has been captured and verified. No official Alexa+ device or gated-tool integration is claimed; this is the self-hosted-MCP web simulation path described in the event FAQ.
 
 **2:40–2:55 — Close**
 
