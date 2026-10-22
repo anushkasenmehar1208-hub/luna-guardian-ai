@@ -119,6 +119,8 @@ Verified locally on October 22, 2026:
 - All nine required tools were discovered
 - Authenticated MCP `create_task` and `list_tasks` calls succeeded and persisted data
 
+GitHub Actions workflows are present in both repositories, but the initial hosted job was rejected before executing any step because the GitHub account was locked for a billing issue. See the friction log; this is not reported as a test failure or a passing CI run.
+
 Browser speech recognition depends on browser support and microphone permission. Chromium-based browsers generally expose the Web Speech API; unsupported or denied cases retain full text input. This is not Alexa voice transport.
 
 ## Deployment

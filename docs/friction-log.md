@@ -41,3 +41,13 @@ All entries below came from this build session on October 22, 2026.
 - **Severity:** High for the AWS Builder mini-challenge; none for the provider-neutral application.
 - **Workaround:** Implemented a configurable Bedrock provider without claiming it works, retained other provider paths, and documented the exact verification gap.
 - **Suggested improvement:** Provide hackathon participants with a credential-readiness checklist and a minimal Bedrock access verification command.
+
+## 5. GitHub-hosted CI blocked before execution
+
+- **Attempted task:** Run the already passing test and lint commands on every push in GitHub Actions.
+- **Steps taken:** Added a Python 3.12 workflow to both public repositories and pushed it to `main`.
+- **Expected result:** GitHub would provision an `ubuntu-latest` runner and execute installation, lint, compilation, and tests.
+- **Actual result:** The first job ended before any step ran with: “The job was not started because your account is locked due to a billing issue.”
+- **Severity:** Medium — local verification is complete, but hosted CI cannot provide an independent green run.
+- **Workaround:** Retained the workflow files and the successful local command evidence; did not retry an account-level failure.
+- **Suggested improvement:** Resolve the GitHub billing lock, then rerun the existing workflows without code changes.
